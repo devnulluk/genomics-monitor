@@ -1,0 +1,13 @@
+data/
+*.vcf
+*.vcf.gz
+*.bcf
+*.bam
+*.cram
+*.fastq*
+*.sqlite*
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+

@@ -1,0 +1,14 @@
+services:
+  genomics-monitor:
+    build: .
+    restart: unless-stopped
+    environment:
+      GENOMICS_DB: /data/genomics.sqlite
+      GENOME_BUILD: ${GENOME_BUILD:-GRCh38}
+      GENOMICS_API_TOKEN_FILE: ${GENOMICS_API_TOKEN_FILE:-}
+      GENOMICS_API_TOKEN: ${GENOMICS_API_TOKEN:-}
+    volumes:
+      - ${GENOMICS_DATA_DIR:-./data}:/data
+    ports:
+      - "${GENOMICS_PORT:-31030}:8080"
+
