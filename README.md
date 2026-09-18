@@ -68,6 +68,14 @@ For a remote private-LAN deployment, `POST /imports/vcf-file` accepts a streamed
 
 ClinVar review status is retained and mapped conservatively: practice guidelines and expert panels remain distinct, multi-submitter agreement is labelled replicated, and conflicts remain explicit. ClinVar is a public archive of submitted classifications; it is not direct diagnostic advice, and NCBI does not independently verify every submission. Findings require suitable professional review before health decisions. Each retained assertion attributes and links back to ClinVar.
 
+## Research monitoring and reports
+
+`POST /sync/gwas` streams the NHGRI-EBI GWAS Catalog's literature-curated associations and retains only records whose stated effect allele is present in the private genotype index. These remain `research` / `single_study` evidence: statistical association is not causation, clinical validity or individual prediction, and applicability may depend strongly on ancestry, phenotype definition and study design.
+
+`GET /reports/initial` produces a private aggregate baseline grouped by source, category, evidence level and clinical significance. `POST /reports/initial/notify` sends that aggregate through the whitespace-separated Apprise services in `APPRISE_URLS`; it never includes genotypes or variant-level findings. The intended notification model is one baseline followed by deduplicated alerts only for new or materially changed evidence.
+
+Europe PMC paper/preprint and text-mined mutation monitoring is the next experimental tier. Automated text-mining hits must be labelled as leads until the reported allele, direction, cohort, population, phenotype and study design have been checked.
+
 ## Roadmap
 
 1. Validate input reference assembly, sample count and contig naming.

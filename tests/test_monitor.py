@@ -1,10 +1,13 @@
 import os
 import gzip
+import json
 
 from fastapi.testclient import TestClient
 
 from genomics_monitor.app import app
 from genomics_monitor.clinvar import sync_clinvar
+from genomics_monitor.gwas import sync_gwas
+from genomics_monitor.importer import import_vcf
 
 
 def test_import_and_match(tmp_path):
@@ -90,3 +93,26 @@ def test_clinvar_sync_keeps_only_called_alt(tmp_path, monkeypatch):
     assert finding["source"] == "ClinVar"
     assert finding["evidence_level"] == "expert_panel"
     assert finding["effect_allele_status"] == "present"
+
+
+def test_gwas_sync_keeps_only_present_effect_allele(tmp_path, monkeypatch):
+    vcf = tmp_path / "genome.vcf"
+    vcf.write_text("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS\n1\t100\trs123\tA\tG\t50\tPASS\t.\tGT\t0/1\n", encoding="utf-8")
+    assert import_vcf(str(vcf), "GRCh38")["variant_count"] == 1
+    payload = {"_embedded": {"associations": [{
+        "association_id": 7, "p_value": 1e-9, "efo_traits": [{"efo_id": "EFO_1", "efo_trait": "example trait"}],
+        "snp_allele": [{"rs_id": "rs123", "effect_allele": "G"}, {"rs_id": "rs123", "effect_allele": "T"}],
+    }]}, "_links": {}}
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self): return json.dumps(payload).encode()
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: Response())
+    result = sync_gwas("https://example.test", max_pages=1)
+    assert result["matched_records"] == 1
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer test-token"}
+    report = client.get("/reports/initial", headers=headers).json()
+    assert report["by_source"]["GWAS Catalog"] == 1

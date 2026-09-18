@@ -11,9 +11,12 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .clinvar import latest_sync, sync_clinvar
+from .gwas import latest_sync as latest_gwas_sync, sync_gwas
 from .db import connect
 from .evidence import findings, ingest
 from .importer import import_vcf
+from .reports import initial_report
+from .notifier import send as send_notification
 
 app = FastAPI(title="Genomics Monitor", version=__version__)
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -64,7 +67,7 @@ def status() -> dict:
         latest = db.execute("SELECT imported_at,genome_build FROM imports ORDER BY id DESC LIMIT 1").fetchone()
     return {"variants": variant_count, "evidence_records": evidence_count, "matched_findings": finding_count,
             "genome_build": latest["genome_build"] if latest else None, "last_genome_import": latest["imported_at"] if latest else None,
-            "clinvar_sync": latest_sync()}
+            "clinvar_sync": latest_sync(), "gwas_sync": latest_gwas_sync()}
 
 
 @app.post("/sync/clinvar", dependencies=[Depends(require_token)], status_code=202)
@@ -74,6 +77,31 @@ def start_clinvar_sync() -> dict:
         return {"status": "already_running", "sync": current}
     threading.Thread(target=sync_clinvar, daemon=True, name="clinvar-sync").start()
     return {"status": "started"}
+
+
+@app.post("/sync/gwas", dependencies=[Depends(require_token)], status_code=202)
+def start_gwas_sync() -> dict:
+    current = latest_gwas_sync()
+    if current and current.get("status") == "running":
+        return {"status": "already_running", "sync": current}
+    threading.Thread(target=sync_gwas, daemon=True, name="gwas-sync").start()
+    return {"status": "started"}
+
+
+@app.get("/reports/initial", dependencies=[Depends(require_token)])
+def get_initial_report() -> dict:
+    return initial_report()
+
+
+@app.post("/reports/initial/notify", dependencies=[Depends(require_token)])
+def notify_initial_report() -> dict:
+    report = initial_report()
+    sources = ", ".join(f"{name}: {count:,}" for name, count in sorted(report["by_source"].items()))
+    body = (
+        f"{report['indexed_calls']:,} indexed GRCh38 calls; {report['evidence_matches']:,} matched evidence records.\n"
+        f"{sources}\nEvidence inventory only — not diagnoses or personalised medical advice."
+    )
+    return {"sent": send_notification("Your initial genome evidence report", body), "report": report}
 
 
 @app.post("/imports/vcf", dependencies=[Depends(require_token)])

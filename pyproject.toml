@@ -1,9 +1,9 @@
 [project]
 name = "genomics-monitor"
-version = "0.2.0"
+version = "0.3.0"
 description = "Private, evidence-first personal genome monitoring"
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.116,<1", "python-multipart>=0.0.20,<1", "uvicorn[standard]>=0.35,<1"]
+dependencies = ["apprise>=1.9,<2", "fastapi>=0.116,<1", "python-multipart>=0.0.20,<1", "uvicorn[standard]>=0.35,<1"]
 
 [project.optional-dependencies]
 test = ["httpx>=0.28,<1", "pytest>=8,<9"]
