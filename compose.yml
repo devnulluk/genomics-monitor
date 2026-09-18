@@ -12,7 +12,7 @@ services:
       GENOMICS_API_TOKEN_FILE: ${GENOMICS_API_TOKEN_FILE:-}
       GENOMICS_API_TOKEN: ${GENOMICS_API_TOKEN:-}
       CLINVAR_VCF_URL: ${CLINVAR_VCF_URL:-https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz}
-      GWAS_API_URL: ${GWAS_API_URL:-https://www.ebi.ac.uk/gwas/rest/api/v2/associations?size=250}
+      GWAS_TSV_URL: ${GWAS_TSV_URL:-https://ftp.ebi.ac.uk/pub/databases/gwas/releases/latest/gwas-catalog-associations_ontology-annotated.tsv}
       APPRISE_URLS: ${APPRISE_URLS:-}
     volumes:
       - ${GENOMICS_DATA_DIR:-/mnt/zpool1/docker/genomics-monitor}:/data

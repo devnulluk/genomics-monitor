@@ -99,18 +99,14 @@ def test_gwas_sync_keeps_only_present_effect_allele(tmp_path, monkeypatch):
     vcf = tmp_path / "genome.vcf"
     vcf.write_text("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS\n1\t100\trs123\tA\tG\t50\tPASS\t.\tGT\t0/1\n", encoding="utf-8")
     assert import_vcf(str(vcf), "GRCh38")["variant_count"] == 1
-    payload = {"_embedded": {"associations": [{
-        "association_id": 7, "p_value": 1e-9, "efo_traits": [{"efo_id": "EFO_1", "efo_trait": "example trait"}],
-        "snp_allele": [{"rs_id": "rs123", "effect_allele": "G"}, {"rs_id": "rs123", "effect_allele": "T"}],
-    }]}, "_links": {}}
-
-    class Response:
-        def __enter__(self): return self
-        def __exit__(self, *_): return False
-        def read(self): return json.dumps(payload).encode()
-
-    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: Response())
-    result = sync_gwas("https://example.test", max_pages=1)
+    catalog = tmp_path / "gwas.tsv"
+    catalog.write_text(
+        "PUBMEDID\tSTUDY ACCESSION\tSTRONGEST SNP-RISK ALLELE\tMAPPED_TRAIT\tMAPPED_TRAIT_URI\tP-VALUE\tLINK\n"
+        "123\tGCST1\trs123-G\texample trait\tEFO_1\t1e-9\thttps://example.test/paper\n"
+        "123\tGCST1\trs123-T\texample trait\tEFO_1\t1e-9\thttps://example.test/paper\n",
+        encoding="utf-8",
+    )
+    result = sync_gwas(catalog.as_uri())
     assert result["matched_records"] == 1
     client = TestClient(app)
     headers = {"Authorization": "Bearer test-token"}
