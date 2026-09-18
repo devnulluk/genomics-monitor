@@ -11,6 +11,7 @@ services:
       GENOME_BUILD: ${GENOME_BUILD:-GRCh38}
       GENOMICS_API_TOKEN_FILE: ${GENOMICS_API_TOKEN_FILE:-}
       GENOMICS_API_TOKEN: ${GENOMICS_API_TOKEN:-}
+      CLINVAR_VCF_URL: ${CLINVAR_VCF_URL:-https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz}
     volumes:
       - ${GENOMICS_DATA_DIR:-/mnt/zpool1/docker/genomics-monitor}:/data
     ports:

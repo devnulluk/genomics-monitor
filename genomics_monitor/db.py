@@ -66,6 +66,18 @@ CREATE TABLE IF NOT EXISTS feedback (
   note TEXT,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS evidence_sync (
+  id INTEGER PRIMARY KEY,
+  source TEXT NOT NULL,
+  source_version TEXT,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  status TEXT NOT NULL,
+  records_scanned INTEGER NOT NULL DEFAULT 0,
+  matched_records INTEGER NOT NULL DEFAULT 0,
+  inserted_records INTEGER NOT NULL DEFAULT 0,
+  error TEXT
+);
 """
 
 

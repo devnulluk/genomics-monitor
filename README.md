@@ -62,12 +62,18 @@ Do not commit genomes, findings databases, credentials or generated reports. The
 
 For a remote private-LAN deployment, `POST /imports/vcf-file` accepts a streamed multipart VCF upload, writes it to the protected input directory and immediately imports it. The endpoint uses the same bearer token and enforces a configurable size ceiling. Do not expose it through a public tunnel.
 
+## ClinVar monitoring
+
+`POST /sync/clinvar` starts a background sync from NCBI's official weekly GRCh38 VCF. The sync streams the release, checks exact locus and alleles against the private call index, and stores only assertions for alternate alleles actually present in the sample genotype. Reference calls and no-calls are not reported as personal matches.
+
+ClinVar review status is retained and mapped conservatively: practice guidelines and expert panels remain distinct, multi-submitter agreement is labelled replicated, and conflicts remain explicit. ClinVar is a public archive of submitted classifications; it is not direct diagnostic advice, and NCBI does not independently verify every submission. Findings require suitable professional review before health decisions. Each retained assertion attributes and links back to ClinVar.
+
 ## Roadmap
 
 1. Validate input reference assembly, sample count and contig naming.
 2. Add allele-aware matching, genotype-dose checks and explicit no-call handling.
 3. Add pinned offline Ensembl VEP annotation with provenance.
-4. Import weekly ClinVar releases and detect changed assertions.
+4. Detect changed ClinVar assertions and notify by tier.
 5. Add GWAS Catalog and Europe PMC monitoring.
 6. Add feedback, digests and Apprise notifications.
 7. Expose a sanitised read-only portal contract.

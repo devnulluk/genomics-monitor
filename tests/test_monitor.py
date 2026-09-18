@@ -1,8 +1,10 @@
 import os
+import gzip
 
 from fastapi.testclient import TestClient
 
 from genomics_monitor.app import app
+from genomics_monitor.clinvar import sync_clinvar
 
 
 def test_import_and_match(tmp_path):
@@ -61,3 +63,30 @@ def test_streamed_vcf_upload(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["variant_count"] == 1
     assert (tmp_path / "input" / "genome.vcf").exists()
+
+
+def test_clinvar_sync_keeps_only_called_alt(tmp_path, monkeypatch):
+    monkeypatch.setenv("GENOMICS_DB", str(tmp_path / "clinvar.sqlite"))
+    monkeypatch.setenv("GENOMICS_API_TOKEN", "test-token")
+    sample = tmp_path / "sample.vcf"
+    sample.write_text(
+        "##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n"
+        "1\t101\trs1\tA\tG\t99\tPASS\t.\tGT\t0/1\n"
+        "1\t202\trs2\tC\tT\t99\tRefCall\t.\tGT\t0/0\n"
+    )
+    headers = {"Authorization": "Bearer test-token"}
+    client = TestClient(app)
+    assert client.post("/imports/vcf", json={"path": str(sample), "genome_build": "GRCh38"}, headers=headers).status_code == 200
+    clinvar = tmp_path / "clinvar.vcf.gz"
+    with gzip.open(clinvar, "wt") as handle:
+        handle.write("##fileformat=VCFv4.2\n##fileDate=20260915\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+        handle.write("1\t101\trs1\tA\tG\t.\t.\tALLELEID=10;CLNSIG=Pathogenic;CLNREVSTAT=reviewed_by_expert_panel;CLNDN=Example_condition\n")
+        handle.write("1\t202\trs2\tC\tT\t.\t.\tALLELEID=20;CLNSIG=Pathogenic;CLNREVSTAT=criteria_provided,_single_submitter;CLNDN=Reference_call\n")
+    result = sync_clinvar(clinvar.as_uri())
+    assert result["records_scanned"] == 2
+    assert result["matched_records"] == 1
+    assert result["inserted_records"] == 1
+    finding = client.get("/findings", headers=headers).json()["items"][0]
+    assert finding["source"] == "ClinVar"
+    assert finding["evidence_level"] == "expert_panel"
+    assert finding["effect_allele_status"] == "present"

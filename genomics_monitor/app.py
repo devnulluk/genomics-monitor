@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
-import shutil
 import tempfile
+import threading
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Security, UploadFile
@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from . import __version__
+from .clinvar import latest_sync, sync_clinvar
 from .db import connect
 from .evidence import findings, ingest
 from .importer import import_vcf
@@ -43,7 +44,8 @@ class EvidenceBatch(BaseModel):
 
 @app.on_event("startup")
 def startup() -> None:
-    connect().close()
+    with connect() as db:
+        db.execute("UPDATE evidence_sync SET status='interrupted',completed_at=datetime('now'),error='service_restarted' WHERE status='running'")
 
 
 @app.get("/health")
@@ -61,7 +63,17 @@ def status() -> dict:
             (e.chrom IS NOT NULL AND e.chrom=v.chrom AND e.pos=v.pos AND e.ref=v.ref AND e.alt=v.alt))""").fetchone()[0]
         latest = db.execute("SELECT imported_at,genome_build FROM imports ORDER BY id DESC LIMIT 1").fetchone()
     return {"variants": variant_count, "evidence_records": evidence_count, "matched_findings": finding_count,
-            "genome_build": latest["genome_build"] if latest else None, "last_genome_import": latest["imported_at"] if latest else None}
+            "genome_build": latest["genome_build"] if latest else None, "last_genome_import": latest["imported_at"] if latest else None,
+            "clinvar_sync": latest_sync()}
+
+
+@app.post("/sync/clinvar", dependencies=[Depends(require_token)], status_code=202)
+def start_clinvar_sync() -> dict:
+    current = latest_sync()
+    if current and current.get("status") == "running":
+        return {"status": "already_running", "sync": current}
+    threading.Thread(target=sync_clinvar, daemon=True, name="clinvar-sync").start()
+    return {"status": "started"}
 
 
 @app.post("/imports/vcf", dependencies=[Depends(require_token)])
