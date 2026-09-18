@@ -5,7 +5,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Security, UploadFile
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from . import __version__
@@ -14,6 +15,7 @@ from .evidence import findings, ingest
 from .importer import import_vcf
 
 app = FastAPI(title="Genomics Monitor", version=__version__)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def _token() -> str:
@@ -23,9 +25,10 @@ def _token() -> str:
     return os.getenv("GENOMICS_API_TOKEN", "")
 
 
-def require_token(authorization: str | None = Header(default=None)) -> None:
+def require_token(credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme)) -> None:
     expected = _token()
-    if expected and authorization != f"Bearer {expected}":
+    supplied = credentials.credentials if credentials and credentials.scheme.lower() == "bearer" else None
+    if expected and supplied != expected:
         raise HTTPException(status_code=401, detail="Unauthorised")
 
 
