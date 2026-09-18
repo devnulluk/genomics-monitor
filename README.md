@@ -60,6 +60,8 @@ curl -X POST http://localhost:31030/imports/vcf \
 
 Do not commit genomes, findings databases, credentials or generated reports. The repository ignores common genomic formats and `data/` by default.
 
+For a remote private-LAN deployment, `POST /imports/vcf-file` accepts a streamed multipart VCF upload, writes it to the protected input directory and immediately imports it. The endpoint uses the same bearer token and enforces a configurable size ceiling. Do not expose it through a public tunnel.
+
 ## Roadmap
 
 1. Validate input reference assembly, sample count and contig naming.
@@ -77,4 +79,3 @@ This project is openly vibe-coded with OpenAI ChatGPT and Codex under human dire
 ## Licence
 
 Code is MIT licensed. Third-party datasets and annotation sources retain their own licences, attribution requirements and clinical-use limitations; redistribution of those datasets is not granted by this repository's licence.
-

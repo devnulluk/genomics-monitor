@@ -45,3 +45,19 @@ def test_multiallelic_effect_allele(tmp_path):
     client.post("/evidence", json={"records":[evidence]}, headers=headers)
     statuses = {item["called_alt"]: item["effect_allele_status"] for item in client.get("/findings", headers=headers).json()["items"]}
     assert statuses == {"G": "not_present", "T": "present"}
+
+
+def test_streamed_vcf_upload(tmp_path, monkeypatch):
+    monkeypatch.setenv("GENOMICS_DB", str(tmp_path / "upload.sqlite"))
+    monkeypatch.setenv("GENOMICS_INPUT_DIR", str(tmp_path / "input"))
+    monkeypatch.setenv("GENOMICS_API_TOKEN", "test-token")
+    content = b"##fileformat=VCFv4.2\n##contig=<ID=chr1,length=248956422>\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\nchr1\t101\trs789\tA\tG\t99\tPASS\t.\tGT\t0/1\n"
+    response = TestClient(app).post(
+        "/imports/vcf-file",
+        headers={"Authorization": "Bearer test-token"},
+        data={"genome_build": "GRCh38"},
+        files={"file": ("genome.vcf", content, "text/plain")},
+    )
+    assert response.status_code == 200
+    assert response.json()["variant_count"] == 1
+    assert (tmp_path / "input" / "genome.vcf").exists()

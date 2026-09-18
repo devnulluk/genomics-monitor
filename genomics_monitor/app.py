@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from . import __version__
@@ -67,6 +69,40 @@ def upload_vcf(request: VcfImport) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/imports/vcf-file", dependencies=[Depends(require_token)])
+def upload_vcf_file(
+    genome_build: str = Form(pattern="^GRCh(37|38)$"),
+    file: UploadFile = File(),
+) -> dict:
+    filename = Path(file.filename or "genome.vcf.gz").name
+    if not (filename.endswith(".vcf") or filename.endswith(".vcf.gz")):
+        raise HTTPException(status_code=400, detail="Only .vcf and .vcf.gz files are accepted")
+    input_dir = Path(os.getenv("GENOMICS_INPUT_DIR", "/data/input"))
+    input_dir.mkdir(parents=True, exist_ok=True)
+    maximum = int(os.getenv("GENOMICS_MAX_UPLOAD_BYTES", str(2 * 1024 * 1024 * 1024)))
+    size = 0
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=input_dir, prefix="upload-", suffix=".tmp", delete=False) as target:
+            temporary_path = Path(target.name)
+            while chunk := file.file.read(8 * 1024 * 1024):
+                size += len(chunk)
+                if size > maximum:
+                    raise HTTPException(status_code=413, detail="Upload exceeds configured limit")
+                target.write(chunk)
+        final_path = input_dir / filename
+        os.replace(temporary_path, final_path)
+        result = import_vcf(str(final_path), genome_build)
+        result["uploaded_bytes"] = size
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        file.file.close()
+        if temporary_path and temporary_path.exists():
+            temporary_path.unlink()
+
+
 @app.post("/evidence", dependencies=[Depends(require_token)])
 def upload_evidence(batch: EvidenceBatch) -> dict:
     try:
@@ -78,4 +114,3 @@ def upload_evidence(batch: EvidenceBatch) -> dict:
 @app.get("/findings", dependencies=[Depends(require_token)])
 def get_findings(limit: int = 100) -> dict:
     return {"items": findings(min(max(limit, 1), 500))}
-
