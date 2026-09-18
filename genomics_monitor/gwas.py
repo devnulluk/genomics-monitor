@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from .db import connect
 from .evidence import ingest
 
-DEFAULT_URL = "https://www.ebi.ac.uk/gwas/rest/api/v2/associations?size=1000"
+DEFAULT_URL = "https://www.ebi.ac.uk/gwas/rest/api/v2/associations?size=250"
 
 
 def _present_effect_alleles(rsids: list[str]) -> dict[str, set[str]]:
@@ -40,7 +40,7 @@ def sync_gwas(url: str | None = None, max_pages: int | None = None) -> dict:
     try:
         while next_url and (max_pages is None or pages < max_pages):
             request = urllib.request.Request(next_url, headers={"Accept": "application/json", "User-Agent": "genomics-monitor/0.3"})
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urllib.request.urlopen(request, timeout=180) as response:
                 page = json.load(response)
             associations = page.get("_embedded", {}).get("associations", [])
             scanned += len(associations)
