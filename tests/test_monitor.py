@@ -1,6 +1,7 @@
 import os
 import gzip
 import json
+import zipfile
 
 from fastapi.testclient import TestClient
 
@@ -112,3 +113,19 @@ def test_gwas_sync_keeps_only_present_effect_allele(tmp_path, monkeypatch):
     headers = {"Authorization": "Bearer test-token"}
     report = client.get("/reports/initial", headers=headers).json()
     assert report["by_source"]["GWAS Catalog"] == 1
+
+
+def test_gwas_sync_reads_official_zip_shape(tmp_path):
+    vcf = tmp_path / "genome-zip.vcf"
+    vcf.write_text("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS\n1\t101\trs456\tC\tT\t50\tPASS\t.\tGT\t0/1\n", encoding="utf-8")
+    assert import_vcf(str(vcf), "GRCh38")["variant_count"] == 1
+    archive_path = tmp_path / "gwas.zip"
+    payload = (
+        "PUBMEDID\tSTUDY ACCESSION\tSTRONGEST SNP-RISK ALLELE\tMAPPED_TRAIT\tMAPPED_TRAIT_URI\tP-VALUE\tLINK\n"
+        "456\tGCST2\trs456-T\tzip trait\tEFO_2\t2e-9\thttps://example.test/zip-paper\n"
+    )
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("gwas_catalog_v1.0-associations_e110_r2026-09-15.tsv", payload)
+    result = sync_gwas(archive_path.as_uri())
+    assert result["records_scanned"] == 1
+    assert result["matched_records"] == 1

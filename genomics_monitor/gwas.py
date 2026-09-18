@@ -4,13 +4,17 @@ import csv
 import hashlib
 import io
 import os
+import shutil
+import tempfile
 import urllib.request
+import zipfile
+from contextlib import ExitStack
 from datetime import datetime, timezone
 
 from .db import connect
 from .evidence import ingest
 
-DEFAULT_URL = "https://ftp.ebi.ac.uk/pub/databases/gwas/releases/latest/gwas-catalog-associations_ontology-annotated.tsv"
+DEFAULT_URL = "https://ftp.ebi.ac.uk/pub/databases/gwas/releases/latest/gwas-catalog-associations_ontology-annotated-full.zip"
 
 
 def _present_effect_alleles(rsids: list[str]) -> dict[str, set[str]]:
@@ -69,9 +73,22 @@ def sync_gwas(url: str | None = None, max_pages: int | None = None) -> dict:
     scanned = matched = inserted = 0
     release = datetime.now(timezone.utc).date().isoformat()
     try:
-        request = urllib.request.Request(url or os.getenv("GWAS_TSV_URL", DEFAULT_URL), headers={"User-Agent": "genomics-monitor/0.3"})
-        with urllib.request.urlopen(request, timeout=180) as response:
-            reader = csv.DictReader(io.TextIOWrapper(response, encoding="utf-8"), delimiter="\t")
+        catalog_url = url or os.getenv("GWAS_TSV_URL", DEFAULT_URL)
+        request = urllib.request.Request(catalog_url, headers={"User-Agent": "genomics-monitor/0.3"})
+        with ExitStack() as stack:
+            response = stack.enter_context(urllib.request.urlopen(request, timeout=180))
+            if catalog_url.lower().endswith(".zip"):
+                archive_file = stack.enter_context(tempfile.TemporaryFile())
+                shutil.copyfileobj(response, archive_file)
+                archive_file.seek(0)
+                archive = stack.enter_context(zipfile.ZipFile(archive_file))
+                candidates = [name for name in archive.namelist() if name.lower().endswith((".tsv", ".txt")) and not name.endswith("/")]
+                if not candidates:
+                    raise ValueError("GWAS archive contains no tabular association file")
+                source = stack.enter_context(archive.open(max(candidates, key=lambda name: archive.getinfo(name).file_size)))
+            else:
+                source = response
+            reader = csv.DictReader(io.TextIOWrapper(source, encoding="utf-8-sig"), delimiter="\t")
             batch = []
             for row in reader:
                 batch.append(row); scanned += 1
