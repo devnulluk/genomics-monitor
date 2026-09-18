@@ -39,7 +39,7 @@ def ingest(records: list[dict]) -> dict:
 def findings(limit: int = 100) -> list[dict]:
     query = """
     SELECT e.*, v.chrom AS called_chrom, v.pos AS called_pos, v.ref AS called_ref,
-      v.alt AS called_alt, v.genotype, v.phased, v.filter_status, v.quality,
+      v.alt AS called_alt, v.alt_index, v.genotype, v.phased, v.filter_status, v.quality,
       CASE e.category WHEN 'clinical' THEN 1 WHEN 'health' THEN 2 WHEN 'trait' THEN 3
            WHEN 'ancestry' THEN 4 WHEN 'research' THEN 5 ELSE 6 END AS tier_rank
     FROM evidence e JOIN variants v ON
@@ -59,6 +59,8 @@ def findings(limit: int = 100) -> list[dict]:
             row["effect_allele_status"] = "not_specified"
         else:
             called_indexes = {part for part in genotype.replace("|", "/").split("/") if part != "."}
-            called_alleles = {row["called_ref"] if idx == "0" else row["called_alt"] for idx in called_indexes}
-            row["effect_allele_status"] = "present" if effect in called_alleles else "not_present"
+            present = (effect == row["called_ref"] and "0" in called_indexes) or (
+                effect == row["called_alt"] and str(row["alt_index"]) in called_indexes
+            )
+            row["effect_allele_status"] = "present" if present else "not_present"
     return rows

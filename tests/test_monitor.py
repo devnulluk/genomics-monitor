@@ -31,3 +31,17 @@ def test_token_required(tmp_path):
     response = TestClient(app).get("/status")
     assert response.status_code == 401
     assert "secret" not in response.text
+
+
+def test_multiallelic_effect_allele(tmp_path):
+    os.environ["GENOMICS_DB"] = str(tmp_path / "multi.sqlite")
+    os.environ["GENOMICS_API_TOKEN"] = "test-token"
+    vcf = tmp_path / "multi.vcf"
+    vcf.write_text("##fileformat=VCFv4.2\n##contig=<ID=chr1,length=248956422>\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\nchr1\t101\trs456\tA\tG,T\t99\tPASS\t.\tGT\t0/2\n")
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer test-token"}
+    assert client.post("/imports/vcf", json={"path": str(vcf), "genome_build": "GRCh38"}, headers=headers).status_code == 200
+    evidence = {"source":"example","source_record_id":"paper-2","title":"Example","summary":"Example","category":"trait","evidence_level":"single_study","rsid":"rs456","effect_allele":"T","url":"https://example.test/two"}
+    client.post("/evidence", json={"records":[evidence]}, headers=headers)
+    statuses = {item["called_alt"]: item["effect_allele_status"] for item in client.get("/findings", headers=headers).json()["items"]}
+    assert statuses == {"G": "not_present", "T": "present"}

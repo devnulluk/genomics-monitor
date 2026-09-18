@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS variants (
   pos INTEGER NOT NULL,
   ref TEXT NOT NULL,
   alt TEXT NOT NULL,
+  alt_index INTEGER NOT NULL DEFAULT 1,
   rsid TEXT,
   genotype TEXT,
   phased INTEGER NOT NULL DEFAULT 0,
@@ -75,5 +76,7 @@ def connect() -> sqlite3.Connection:
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
     db.executescript(SCHEMA)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(variants)")}
+    if "alt_index" not in columns:
+        db.execute("ALTER TABLE variants ADD COLUMN alt_index INTEGER NOT NULL DEFAULT 1")
     return db
-
