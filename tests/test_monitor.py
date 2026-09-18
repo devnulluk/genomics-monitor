@@ -121,8 +121,8 @@ def test_gwas_sync_reads_official_zip_shape(tmp_path):
     assert import_vcf(str(vcf), "GRCh38")["variant_count"] == 1
     archive_path = tmp_path / "gwas.zip"
     payload = (
-        "PUBMEDID\tSTUDY ACCESSION\tSTRONGEST SNP-RISK ALLELE\tMAPPED_TRAIT\tMAPPED_TRAIT_URI\tP-VALUE\tLINK\n"
-        "456\tGCST2\trs456-T\tzip trait\tEFO_2\t2e-9\thttps://example.test/zip-paper\n"
+        "PUBMEDID\tSTUDY ACCESSION\tSTRONGEST SNP-RISK ALLELE\tCHR_ID\tCHR_POS\tMAPPED_TRAIT\tMAPPED_TRAIT_URI\tP-VALUE\tLINK\n"
+        "456\tGCST2\trs456-T\t1\t101\tzip trait\tEFO_2\t2e-9\thttps://example.test/zip-paper\n"
     )
     with zipfile.ZipFile(archive_path, "w") as archive:
         archive.writestr("gwas_catalog_v1.0-associations_e110_r2026-09-15.tsv", payload)

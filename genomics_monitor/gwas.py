@@ -17,21 +17,34 @@ from .evidence import ingest
 DEFAULT_URL = "https://ftp.ebi.ac.uk/pub/databases/gwas/releases/latest/gwas-catalog-associations_ontology-annotated-full.zip"
 
 
-def _present_effect_alleles(rsids: list[str]) -> dict[str, set[str]]:
-    present: dict[str, set[str]] = {}
+def _called_alleles(row) -> set[str]:
+    called = {part for part in (row["genotype"] or "").replace("|", "/").split("/") if part != "."}
+    alleles: set[str] = set()
+    if "0" in called:
+        alleles.add(row["ref"])
+    if str(row["alt_index"]) in called:
+        alleles.add(row["alt"])
+    return alleles
+
+
+def _present_effect_alleles(parsed: list[tuple]) -> dict[int, set[str]]:
+    present: dict[int, set[str]] = {}
     with connect() as db:
-        for start in range(0, len(rsids), 500):
-            chunk = rsids[start:start + 500]
-            if not chunk:
-                continue
-            marks = ",".join("?" for _ in chunk)
-            for row in db.execute(f"SELECT rsid,ref,alt,alt_index,genotype FROM variants WHERE rsid IN ({marks})", chunk):
-                called = {part for part in (row["genotype"] or "").replace("|", "/").split("/") if part != "."}
-                alleles = present.setdefault(row["rsid"], set())
-                if "0" in called:
-                    alleles.add(row["ref"])
-                if str(row["alt_index"]) in called:
-                    alleles.add(row["alt"])
+        db.execute("CREATE TEMP TABLE gwas_batch(row_id INTEGER, rsid TEXT, chrom TEXT, pos INTEGER)")
+        db.executemany(
+            "INSERT INTO gwas_batch VALUES(?,?,?,?)",
+            [(index, rsid, chrom, pos) for index, (_, rsid, _, chrom, pos) in enumerate(parsed)],
+        )
+        matches = db.execute("""
+          SELECT b.row_id,v.ref,v.alt,v.alt_index,v.genotype
+          FROM gwas_batch b JOIN variants v ON b.chrom=v.chrom AND b.pos=v.pos
+          UNION
+          SELECT b.row_id,v.ref,v.alt,v.alt_index,v.genotype
+          FROM gwas_batch b JOIN variants v ON b.rsid=v.rsid
+          WHERE b.rsid IS NOT NULL
+        """).fetchall()
+        for row in matches:
+            present.setdefault(row["row_id"], set()).update(_called_alleles(row))
     return present
 
 
@@ -44,11 +57,17 @@ def _flush(rows: list[dict], release: str) -> tuple[int, int]:
         rsid, effect = strongest.rsplit("-", 1)
         if not rsid.startswith("rs") or not effect or effect == "?":
             continue
-        parsed.append((row, rsid, effect.upper()))
-    present = _present_effect_alleles(sorted({rsid for _, rsid, _ in parsed}))
+        chrom = (row.get("CHR_ID") or "").removeprefix("chr")
+        position = row.get("CHR_POS") or ""
+        try:
+            pos = int(position)
+        except ValueError:
+            pos = None
+        parsed.append((row, rsid, effect.upper(), chrom or None, pos))
+    present = _present_effect_alleles(parsed)
     records = []
-    for row, rsid, effect in parsed:
-        if effect not in present.get(rsid, set()):
+    for index, (row, rsid, effect, chrom, pos) in enumerate(parsed):
+        if effect not in present.get(index, set()):
             continue
         trait = row.get("MAPPED_TRAIT") or row.get("DISEASE/TRAIT") or "Unlabelled trait"
         identity = "|".join((row.get("PUBMEDID", ""), row.get("STUDY ACCESSION", ""), rsid, effect, trait))
@@ -57,6 +76,7 @@ def _flush(rows: list[dict], release: str) -> tuple[int, int]:
             "source": "GWAS Catalog", "source_record_id": record_id, "source_version": release,
             "title": f"{trait} association", "summary": f"Literature-curated GWAS association for {rsid}-{effect}; not a clinical classification.",
             "category": "research", "evidence_level": "single_study", "rsid": rsid,
+            "chrom": chrom, "pos": pos,
             "effect_allele": effect, "trait_id": row.get("MAPPED_TRAIT_URI") or None,
             "trait_label": trait, "population": row.get("INITIAL SAMPLE SIZE") or None,
             "effect_size": row.get("OR or BETA") or None, "p_value": row.get("P-VALUE") or None,
