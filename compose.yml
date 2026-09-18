@@ -2,6 +2,10 @@ services:
   genomics-monitor:
     build: .
     restart: unless-stopped
+    # TrueNAS creates a new bind-mount directory as root. Run as root at the
+    # container boundary so SQLite and streamed imports can initialise it;
+    # the API remains token protected and is published only on the private LAN.
+    user: "0:0"
     environment:
       GENOMICS_DB: /data/genomics.sqlite
       GENOME_BUILD: ${GENOME_BUILD:-GRCh38}
