@@ -26,6 +26,7 @@ def test_import_and_match(tmp_path):
     items = client.get("/findings", headers=headers).json()["items"]
     assert len(items) == 1
     assert items[0]["genotype"] == "0/1"
+    assert items[0]["genotype_display"] == "A/G"
     assert items[0]["category"] == "trait"
     assert items[0]["effect_allele_status"] == "present"
     assert items[0]["match_basis"] == "rsid"
@@ -51,6 +52,25 @@ def test_multiallelic_effect_allele(tmp_path):
     client.post("/evidence", json={"records":[evidence]}, headers=headers)
     statuses = {item["called_alt"]: item["effect_allele_status"] for item in client.get("/findings", headers=headers).json()["items"]}
     assert statuses == {"G": "not_present", "T": "present"}
+
+
+def test_findings_are_filterable_and_paginated(tmp_path, monkeypatch):
+    monkeypatch.setenv("GENOMICS_DB", str(tmp_path / "filtered.sqlite"))
+    monkeypatch.setenv("GENOMICS_API_TOKEN", "test-token")
+    vcf = tmp_path / "filtered.vcf"
+    vcf.write_text("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS\n1\t101\trs123\tA\tG\t99\tPASS\t.\tGT\t0|1\n")
+    client = TestClient(app); headers = {"Authorization": "Bearer test-token"}
+    client.post("/imports/vcf", json={"path": str(vcf), "genome_build": "GRCh38"}, headers=headers)
+    records = [
+        {"source":"ClinVar","source_record_id":"one","title":"Example condition","summary":"Clinical","category":"clinical","evidence_level":"expert_panel","rsid":"rs123","effect_allele":"G","url":"https://example.test/one"},
+        {"source":"GWAS Catalog","source_record_id":"two","title":"Eye colour association","summary":"Research","category":"research","evidence_level":"single_study","rsid":"rs123","effect_allele":"G","url":"https://example.test/two"},
+    ]
+    client.post("/evidence", json={"records": records}, headers=headers)
+    response = client.get("/findings?category=clinical&limit=1&offset=0&q=condition", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["genotype_display"] == "A|G"
+    assert client.get("/findings?category=nope", headers=headers).status_code == 400
 
 
 def test_streamed_vcf_upload(tmp_path, monkeypatch):

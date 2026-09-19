@@ -5,7 +5,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Security, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Security, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -13,7 +13,7 @@ from . import __version__
 from .clinvar import latest_sync, sync_clinvar
 from .gwas import latest_sync as latest_gwas_sync, sync_gwas
 from .db import connect
-from .evidence import findings, ingest
+from .evidence import ALLOWED_CATEGORIES, ALLOWED_LEVELS, findings, ingest
 from .importer import import_vcf
 from .reports import initial_report
 from .notifier import send as send_notification
@@ -155,5 +155,16 @@ def upload_evidence(batch: EvidenceBatch) -> dict:
 
 
 @app.get("/findings", dependencies=[Depends(require_token)])
-def get_findings(limit: int = 100) -> dict:
-    return {"items": findings(min(max(limit, 1), 500))}
+def get_findings(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    category: str | None = Query(None),
+    source: str | None = Query(None),
+    evidence_level: str | None = Query(None),
+    q: str | None = Query(None, max_length=120),
+) -> dict:
+    if category and category not in ALLOWED_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Unsupported category")
+    if evidence_level and evidence_level not in ALLOWED_LEVELS:
+        raise HTTPException(status_code=400, detail="Unsupported evidence level")
+    return findings(limit, offset, category, source, evidence_level, q)
