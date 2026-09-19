@@ -11,7 +11,7 @@ def initial_report() -> dict:
         variants = db.execute("SELECT COUNT(*) FROM variants").fetchone()[0]
         rows = db.execute(
             """SELECT e.source,e.category,e.evidence_level,e.clinical_significance
-               FROM evidence e WHERE EXISTS (
+               FROM evidence e WHERE e.source='GWAS Catalog' OR EXISTS (
                  SELECT 1 FROM variants v WHERE
                  (e.rsid IS NOT NULL AND e.rsid=v.rsid) OR
                  (e.chrom IS NOT NULL AND e.chrom=v.chrom AND e.pos=v.pos AND e.ref=v.ref AND e.alt=v.alt)

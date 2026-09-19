@@ -61,7 +61,7 @@ def status() -> dict:
     with connect() as db:
         variant_count = db.execute("SELECT COUNT(*) FROM variants").fetchone()[0]
         evidence_count = db.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
-        finding_count = db.execute("""SELECT COUNT(*) FROM evidence e WHERE EXISTS(
+        finding_count = db.execute("""SELECT COUNT(*) FROM evidence e WHERE e.source='GWAS Catalog' OR EXISTS(
             SELECT 1 FROM variants v WHERE (e.rsid IS NOT NULL AND e.rsid=v.rsid) OR
             (e.chrom IS NOT NULL AND e.chrom=v.chrom AND e.pos=v.pos AND e.ref=v.ref AND e.alt=v.alt))""").fetchone()[0]
         latest = db.execute("SELECT imported_at,genome_build FROM imports ORDER BY id DESC LIMIT 1").fetchone()

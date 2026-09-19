@@ -44,13 +44,14 @@ def findings(limit: int = 100) -> list[dict]:
            WHEN 'ancestry' THEN 4 WHEN 'research' THEN 5 ELSE 6 END AS tier_rank
     FROM evidence e JOIN variants v ON
       (e.rsid IS NOT NULL AND e.rsid=v.rsid) OR
-      (e.chrom IS NOT NULL AND e.chrom=v.chrom AND e.pos=v.pos AND e.ref=v.ref AND e.alt=v.alt)
+      (e.chrom IS NOT NULL AND e.chrom=v.chrom AND e.pos=v.pos AND e.ref=v.ref AND e.alt=v.alt) OR
+      (e.source='GWAS Catalog' AND e.chrom=v.chrom AND e.pos=v.pos)
     ORDER BY tier_rank, e.observed_at DESC LIMIT ?
     """
     with connect() as db:
         rows = [dict(row) for row in db.execute(query, (limit,)).fetchall()]
     for row in rows:
-        row["match_basis"] = "rsid" if row.get("rsid") else "exact_locus_and_alleles"
+        row["match_basis"] = "verified_import_match" if row.get("source") == "GWAS Catalog" else ("rsid" if row.get("rsid") else "exact_locus_and_alleles")
         genotype = row.get("genotype")
         effect = row.get("effect_allele")
         if not genotype or genotype in {"./.", ".|."}:
